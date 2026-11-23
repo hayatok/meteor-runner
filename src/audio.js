@@ -16,6 +16,8 @@ export function createAudio() {
   let context;
   let master;
   let music;
+  let feverLayer;
+  let fever = false;
   let noise;
   let timer;
   let beat = 0;
@@ -32,6 +34,9 @@ export function createAudio() {
       music = context.createGain();
       music.gain.value = 0;
       music.connect(master);
+      feverLayer = context.createGain();
+      feverLayer.gain.value = fever ? 1 : 0;
+      feverLayer.connect(music);
       noise = context.createBuffer(1, Math.ceil(context.sampleRate * 0.4), context.sampleRate);
       const samples = noise.getChannelData(0);
       for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
@@ -72,6 +77,7 @@ export function createAudio() {
     const source = context.createBufferSource();
     const filter = context.createBiquadFilter();
     source.buffer = noise;
+    source.loop = duration > noise.duration;
     filter.type = type;
     filter.frequency.setValueAtTime(startHz, time);
     filter.frequency.exponentialRampToValueAtTime(endHz, time + duration);
@@ -94,6 +100,10 @@ export function createAudio() {
       const interval = arp[beat % arp.length];
       const note = frequency(root + 12 + interval + (interval % 12 === 3 ? thirds[chord] : 0));
       tone(nextNote, note, note, 0.085, 'sine', 0.075, music);
+      if (fever) {
+        const high = frequency(root + 36 + [0, 7, 12, 19][beat % 4]);
+        tone(nextNote, high, high, 0.105, 'triangle', 0.052, feverLayer);
+      }
       beat = (beat + 1) % 64;
       nextNote += sixteenth;
     }
@@ -109,6 +119,12 @@ export function createAudio() {
       timer = window.setInterval(schedule, 25);
       schedule();
     }
+  }
+
+  function setFever(active) {
+    fever = active;
+    if (!context) return;
+    feverLayer.gain.setTargetAtTime(active ? 1 : 0, context.currentTime, 0.035);
   }
 
   function play(effect, combo = 0) {
@@ -127,7 +143,29 @@ export function createAudio() {
       case 'dive': tone(now, 480, 100, 0.17, 'triangle', 0.16); break;
       case 'shield': chime([64, 71, 76], 'triangle'); break;
       case 'magnet': chime([72, 67, 79], 'triangle'); break;
-      case 'gate': chime([69, 76, 81]); break;
+      case 'gate': chime([69, 76, 81, 85, 88, 93], 'triangle'); break;
+      case 'riser':
+        wind(now, 0.72, 'bandpass', 240 + combo * 220, 1500 + combo * 400, 0.28);
+        tone(now, 150 + combo * 140, 300 + combo * 220, 0.77, 'triangle', 0.14);
+        break;
+      case 'go':
+        chime([57, 69, 76, 81], 'triangle');
+        wind(now, 0.36, 'bandpass', 1600, 350, 0.34);
+        break;
+      case 'fever': chime([76, 79, 83, 88, 95], 'triangle'); break;
+      case 'shieldBreak':
+        wind(now, 0.21, 'highpass', 5200, 900, 0.56);
+        tone(now, 1060, 160, 0.19, 'triangle', 0.25);
+        break;
+      case 'explosion':
+        wind(now, 0.48, 'lowpass', 1000, 90, 0.72);
+        tone(now, 94, 29, 0.58, 'sine', 0.72);
+        break;
+      case 'tick': tone(now, 950, 630, 0.036, 'triangle', 0.12); break;
+      case 'stamp':
+        tone(now, 170, 46, 0.19, 'triangle', 0.57);
+        wind(now, 0.12, 'lowpass', 1900, 260, 0.38);
+        break;
       case 'collision':
         wind(now, 0.34, 'lowpass', 2400, 180, 0.55);
         tone(now, 83, 32, 0.36, 'triangle', 0.35);
@@ -136,5 +174,5 @@ export function createAudio() {
     }
   }
 
-  return { start, toggleMute, setMusic, play, get muted() { return muted; } };
+  return { start, toggleMute, setMusic, setFever, play, get muted() { return muted; } };
 }

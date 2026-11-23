@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createAudio } from './audio.js';
 import { bindInput } from './input.js';
+import { createPresentation } from './presentation.js';
 import { Runner } from './runner.js';
 import { createUI } from './ui.js';
 import { createWorld } from './world.js';
@@ -23,35 +24,22 @@ function startGame(renderer) {
   container.prepend(renderer.domElement);
   const world = createWorld(container, renderer);
   const audio = createAudio();
-  const run = new Runner(world, onRunEvent);
+  const presentation = createPresentation(world, ui, audio);
+  const run = new Runner(world, (...event) => presentation.event(run, ...event));
   const step = 1 / 120;
+  const impactDuration = 0.12;
   const crashDuration = 0.6;
   const crashTimeScale = 0.25;
   let state = 'title';
+  let resumeState = 'playing';
   let previousTime = null;
   let accumulator = 0;
-  let crashRemaining = 0;
+  let remaining = 0;
+  let countdownTime = 0;
+  let countdownIndex = 0;
 
-  function onRunEvent(event, value, combo) {
-    switch (event) {
-      case 'shard':
-        world.effects.burst(value);
-        audio.play(event, combo);
-        break;
-      case 'nearMiss':
-        world.effects.shake(0.08, 0.15);
-        ui.nearMiss(value);
-        audio.play(event);
-        break;
-      case 'crash':
-        world.effects.shake(0.3, 0.4);
-        break;
-      case 'mission':
-        ui.missionComplete(run, value);
-        break;
-      default:
-        audio.play(event);
-    }
+  function isStartingOrPlaying() {
+    return state === 'playing' || state === 'countdown';
   }
 
   function setState(next) {
@@ -60,26 +48,35 @@ function startGame(renderer) {
     accumulator = 0;
     ui.show(state);
     audio.setMusic(state === 'playing');
-    if (state === 'playing') document.activeElement?.blur();
+    if (state === 'playing' || state === 'countdown') document.activeElement?.blur();
   }
 
   function startRun() {
+    const fromTitle = state === 'title';
     audio.start();
     audio.play('click');
-    world.effects.reset();
     run.reset();
+    presentation.reset();
     ui.start(run);
     ui.update(run);
-    setState('playing');
+    countdownTime = countdownIndex = 0;
+    setState(fromTitle ? 'countdown' : 'playing');
+    presentation.count(fromTitle ? 0 : 3);
+  }
+
+  function pause() {
+    resumeState = state;
+    setState('paused');
   }
 
   function togglePause() {
-    if (state === 'playing') {
+    if (state === 'playing' || state === 'countdown') {
       audio.play('click');
-      setState('paused');
+      pause();
     } else if (state === 'paused' && !document.hidden) {
       audio.play('click');
-      setState('playing');
+      setState(resumeState);
+      if (resumeState === 'countdown') presentation.count(countdownIndex);
     }
   }
 
@@ -91,11 +88,18 @@ function startGame(renderer) {
 
   document.getElementById('start').addEventListener('click', startRun);
   document.getElementById('restart').addEventListener('click', startRun);
-  document.getElementById('pause').addEventListener('click', togglePause);
+  document.getElementById('pause').addEventListener('click', event => {
+    if (isStartingOrPlaying()) event.currentTarget.blur();
+    togglePause();
+  });
   document.getElementById('resume').addEventListener('click', togglePause);
-  document.getElementById('mute').addEventListener('click', toggleMute);
+  document.getElementById('mute').addEventListener('click', event => {
+    if (isStartingOrPlaying()) event.currentTarget.blur();
+    toggleMute();
+  });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && state === 'playing') setState('paused');
+    if (document.hidden && (state === 'playing' || state === 'countdown')) pause();
+    previousTime = null;
   });
 
   bindInput(renderer.domElement, {
@@ -105,37 +109,66 @@ function startGame(renderer) {
     dive: () => { if (state === 'playing') run.duck(); },
     pause: togglePause,
     mute: toggleMute,
-  });
+  }, () => state === 'playing');
 
   ui.setMuted(audio.muted);
   ui.show('title');
   renderer.setAnimationLoop(time => {
     const frameTime = (time - (previousTime ?? time)) / 1000;
     previousTime = time;
-    if (state === 'playing') {
-      const dt = Math.min(0.1, frameTime);
+    const dt = Math.min(0.1, frameTime);
+    if (state !== 'paused' && frameTime > 0 && !document.hidden) world.effects.sampleFrame(frameTime);
+
+    if (state === 'title' || state === 'countdown') {
+      const idle = state === 'title';
+      if (!idle) {
+        countdownTime += dt;
+        const index = Math.min(3, Math.floor(countdownTime));
+        if (index !== countdownIndex) {
+          countdownIndex = index;
+          if (index === 3) setState('playing');
+          presentation.count(index);
+        }
+      }
+      presentation.present(run, dt, idle);
+      world.effects.update(dt, run.speed);
+    } else if (state === 'playing') {
       accumulator += dt;
       while (accumulator >= step && !run.dead) {
         run.advance(step);
         accumulator -= step;
       }
       world.pose(run);
+      presentation.update(run);
+      presentation.present(run, dt);
       world.effects.update(run.dead ? 0 : dt, run.speed);
       ui.update(run);
       if (run.dead) {
-        crashRemaining = crashDuration;
-        setState('crashing');
+        remaining = impactDuration;
+        setState('impact');
         previousTime = time;
       }
-    } else if (state === 'crashing') {
-      const dt = Math.min(crashRemaining, frameTime);
-      run.advanceCrash(dt * crashTimeScale);
-      world.effects.update(dt * crashTimeScale, run.speed, dt);
-      crashRemaining -= dt;
-      if (crashRemaining <= 0) {
-        ui.finish(run);
-        setState('results');
+    } else if (state === 'impact' || state === 'crashing') {
+      const elapsed = Math.min(remaining, frameTime);
+      const slow = state === 'crashing';
+      if (slow) run.advanceCrash(elapsed * crashTimeScale);
+      presentation.present(run, elapsed);
+      world.effects.update(slow ? elapsed * crashTimeScale : elapsed, run.speed, elapsed);
+      remaining -= elapsed;
+      if (remaining <= 0) {
+        if (slow) {
+          ui.finish(run);
+          setState('results');
+        } else {
+          remaining = crashDuration;
+          setState('crashing');
+          previousTime = time;
+        }
       }
+    } else if (state === 'results') {
+      presentation.present(run, dt);
+      ui.updateResults(dt, audio.play, presentation.celebrate);
+      world.effects.update(dt, run.speed, dt, false);
     }
     world.render();
   });

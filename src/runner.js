@@ -155,11 +155,14 @@ export class Runner {
     const laneTime = this.laneTime + dt;
     this.laneTime = Math.min(0.12, laneTime);
     this.x = this.laneX(laneTime);
+    const previousJump = this.jump;
     this.jump = Math.max(0, this.jump - dt);
     this.dive = Math.max(0, this.dive - dt);
     const hover = 0.44 + Math.sin(this.elapsed * 8) * 0.035;
     const targetY = this.dive > 0 ? 0.11 : hover + 1.48 * Math.sin(Math.PI * this.jump / 0.82);
     this.y += (targetY - this.y) * Math.min(1, dt * (this.dive > 0 ? 34 : 24));
+
+    if (previousJump > 0 && this.jump === 0) this.emit('land');
 
     while (this.nextRow - this.distance < spawnAhead
       && (this.nextRow < firstObstacleRow || this.distance >= obstacleSpawnStart)) {
@@ -228,6 +231,7 @@ export class Runner {
         this.emit('collision');
         if (this.shield) {
           this.shield = false;
+          this.emit('shieldBreak');
           return true;
         }
         this.dead = true;

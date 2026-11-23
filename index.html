@@ -9,6 +9,7 @@
   <body>
     <main id="game">
       <div id="flash" aria-hidden="true"></div>
+      <div id="countdown" aria-live="polite" hidden></div>
       <section id="hud" aria-label="走行データ" hidden>
         <div class="stats">
           <div>スコア <strong id="score">0</strong></div>
@@ -19,7 +20,14 @@
         <button id="pause" aria-label="一時停止">一時停止</button>
         <div id="power" class="power"></div>
         <ul id="missions" aria-label="ランミッション"></ul>
-        <p id="near-miss" aria-live="polite"></p>
+        <div id="event-banners" aria-live="polite">
+          <p id="phase-banner"></p>
+          <p id="fever-banner"></p>
+        </div>
+        <div id="hud-pops">
+          <p id="chain" aria-live="polite"></p>
+          <p id="near-miss" aria-live="polite"></p>
+        </div>
         <div id="mission-toasts" aria-live="polite"></div>
       </section>
       <section class="overlay" id="title">

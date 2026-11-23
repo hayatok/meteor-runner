@@ -117,3 +117,64 @@ dd { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .rank { margin: 6px 0; color: var(--yellow); font-size: clamp(2rem, 7vw, 3rem); font-weight: 850; }
 #result-mission-points { margin: 6px 0 12px; color: var(--yellow); }
 #results { padding-bottom: 60px; touch-action: pan-y; }
+
+#flash[data-effect="gate"] {
+  background: radial-gradient(ellipse, #f5ead9 0%, #f5ead960 20%, transparent 57%, #2ec4b6 100%);
+  box-shadow: inset 0 0 8vmin #2ec4b6;
+}
+#flash[data-effect="go"] { background: radial-gradient(ellipse at 50% 73%, #fff2bc, #2ec4b645 26%, transparent 59%); }
+#flash[data-effect="crash"] { background: white; }
+
+#countdown {
+  position: absolute;
+  inset: 22% 0 auto;
+  color: #f5ead9;
+  font-size: clamp(4rem, 13vmin, 9rem);
+  line-height: 1;
+  font-weight: 900;
+  text-align: center;
+  text-shadow: 0 0 30px #2ec4b6, 0 5px 20px #121932;
+  pointer-events: none;
+}
+
+#event-banners {
+  position: fixed;
+  inset: auto 12px max(65px, calc(env(safe-area-inset-bottom) + 60px)) auto;
+  text-align: right;
+}
+#event-banners p {
+  margin: 0;
+  font-size: clamp(1.65rem, 7vmin, 5rem);
+  font-weight: 900;
+  line-height: 1.06;
+  letter-spacing: .07em;
+  color: #f5ead9;
+  text-shadow: 0 0 22px #2ec4b6, 0 3px 8px #121932;
+  opacity: 0;
+}
+#event-banners #fever-banner { color: var(--yellow); font-size: clamp(1.2rem, 5vmin, 3.5rem); }
+#hud-pops { grid-column: 1 / -1; justify-self: start; }
+#chain {
+  margin: 0 0 3px;
+  font-weight: 900;
+  text-shadow: 0 2px 9px #121932;
+  transform-origin: left center;
+  opacity: 0;
+}
+#mission-toasts { justify-self: start; max-width: min(44vw, 270px); text-align: left; }
+
+#title { justify-items: end; background: linear-gradient(90deg, #10152f29, #10152f85); }
+#title .panel { width: min(42%, 480px); }
+#title h1 { animation: logo-pulse 2.8s ease-in-out infinite alternate; }
+@keyframes logo-pulse {
+  from { text-shadow: 0 0 8px #2ec4b675; }
+  to { text-shadow: 0 0 17px #2ec4b6, 0 0 34px #2ec4b680; }
+}
+#results .panel { background: #151a33d9; }
+#result-rank { min-height: 1.5em; }
+#result-score { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 720px) and (orientation: portrait) {
+  #title { justify-items: center; align-items: start; padding-top: max(12px, env(safe-area-inset-top)); }
+  #title .panel { width: min(100%, 480px); background: #151a33dc; }
+}

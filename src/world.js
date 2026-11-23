@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createModels } from './models.js';
 import { createEffects } from './effects.js';
+import { createDroneEffects } from './drone-effects.js';
 
 const indigo = new THREE.Color('#232a52');
 const phaseColors = [
@@ -19,9 +20,9 @@ function addStars(scene) {
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  scene.add(new THREE.Points(geometry, new THREE.PointsMaterial({
-    color: '#f5ead9', size: 0.25, fog: false,
-  })));
+  const material = new THREE.PointsMaterial({ color: '#f5ead9', size: 0.25, fog: false, transparent: true });
+  scene.add(new THREE.Points(geometry, material));
+  return material;
 }
 
 function addNebula(scene) {
@@ -55,7 +56,34 @@ export function createWorld(container, renderer) {
   sun.position.set(-3, 7, 5);
   scene.add(fill, sun, camera);
   const effects = createEffects(scene, camera);
-  addStars(scene);
+  const stars = addStars(scene);
+  const skyMaterial = new THREE.ShaderMaterial({
+    depthTest: false, depthWrite: false,
+    uniforms: {
+      fromSky: { value: indigo.clone() }, toSky: { value: indigo.clone() },
+      progress: { value: 0 }, time: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 screenUV;
+      void main() {
+        screenUV = uv;
+        gl_Position = vec4(position.xy, 0., 1.);
+      }`,
+    fragmentShader: `
+      uniform vec3 fromSky, toSky;
+      uniform float progress, time;
+      varying vec2 screenUV;
+      void main() {
+        float wave = (screenUV.y - .5) * .35 + sin(screenUV.x * 8. - time * 2.) * .1;
+        float blend = clamp(progress + wave * sin(progress * 3.14159), 0., 1.);
+        gl_FragColor = vec4(mix(fromSky, toSky, blend), 1.);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), skyMaterial);
+  sky.frustumCulled = false;
+  sky.renderOrder = -100;
+  scene.add(sky);
   addNebula(scene);
 
   const instantiate = createModels();
@@ -67,6 +95,23 @@ export function createWorld(container, renderer) {
 
   const deck = Array.from({ length: 5 }, () => make('deck'));
   const drone = make('drone');
+  const droneEffects = createDroneEffects(scene, drone);
+  const titleGate = make('gate');
+  const pulseMaterial = new THREE.MeshBasicMaterial({
+    color: '#ffd94d', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const pulseGeometry = new THREE.PlaneGeometry(0.19, 30);
+  pulseGeometry.rotateX(-Math.PI / 2);
+  const pulses = deck.flatMap(tile => [-3.55, 3.55].map(x => {
+    const line = new THREE.Mesh(pulseGeometry, pulseMaterial);
+    line.position.set(x, 0.04, -15);
+    tile.add(line);
+    return line;
+  }));
+  let followX = 0;
+  let roll = 0;
+  let pullback = 0;
+  let time = 0;
   const shield = new THREE.Mesh(new THREE.SphereGeometry(0.87, 24, 16),
     new THREE.MeshBasicMaterial({ color: '#2ec4b6', transparent: true, opacity: 0.27, wireframe: true }));
   shield.position.y = 0.35;
@@ -108,10 +153,6 @@ export function createWorld(container, renderer) {
       camera.fov = fov;
       camera.updateProjectionMatrix();
     }
-    const cameraZ = Math.max(6.7, 2.55 / (Math.tan(THREE.MathUtils.degToRad(fov / 2)) * camera.aspect));
-    camera.position.set(x * 0.22, 3.65, cameraZ);
-    camera.lookAt(x * 0.12, 0.75, -8);
-
     for (let i = 0; i < deck.length; i++) deck[i].position.z = 30 + distance % 30 - 30 * i;
     for (let i = 0; i < rocks.length; i++) {
       rocks[i].position.z = 16 - ((i * 11 + 12 - distance * 0.32) % 155 + 155) % 155;
@@ -123,11 +164,53 @@ export function createWorld(container, renderer) {
     const current = phaseColors[index];
     const next = phaseColors[(index + 1) % phaseColors.length];
     const progress = THREE.MathUtils.smoothstep(cycle, current.end - (current.end - current.start) * 0.2, current.end);
+    skyMaterial.uniforms.fromSky.value.copy(current.sky);
+    skyMaterial.uniforms.toSky.value.copy(next.sky);
+    skyMaterial.uniforms.progress.value = progress;
     scene.background.copy(current.sky).lerp(next.sky, progress);
     scene.fog.color.copy(scene.background);
     fill.color.copy(current.fill).lerp(next.fill, progress);
     sun.color.copy(current.sun).lerp(next.sun, progress);
   }
 
-  return { make, pose, effects, render: () => renderer.render(scene, camera) };
+  function present(run, dt, { idle = false, fever = false, ignition = 0, phasePulse = 0 } = {}) {
+    time += dt;
+    titleGate.visible = idle;
+    drone.visible = !run.dead;
+    if (idle) {
+      pose(run, (time * 5) % 68);
+      titleGate.position.z = -52 + (time * 5) % 68;
+      drone.position.y += Math.sin(time * 2.7) * 0.13;
+      drone.rotation.z = Math.sin(time * 1.7) * 0.07;
+    }
+
+    const blend = 1 - Math.exp(-dt * 10);
+    const speed = (run.speed - 18) / 28;
+    followX += (run.x - followX) * blend;
+    const rollTarget = THREE.MathUtils.clamp((run.x - followX) * -0.065, -0.12, 0.12);
+    roll += (rollTarget - roll) * blend;
+    const apex = Math.max(0, 1 - Math.abs(run.jump - 0.38) / 0.17);
+    pullback += (apex * 1.1 - pullback) * (1 - Math.exp(-dt * 14));
+    const cameraZ = Math.max(6.7, 2.55 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect));
+    const vibration = speed ** 2 * 0.034;
+    camera.position.set(followX * 0.22 + Math.sin(time * 67) * vibration,
+      3.65 + Math.cos(time * 79) * vibration + pullback * 0.16, cameraZ + pullback);
+    camera.lookAt(followX * 0.12, 0.75, -8);
+    camera.rotateZ(roll);
+
+    skyMaterial.uniforms.time.value = time;
+    stars.opacity = 0.76 + phasePulse * (0.12 + 0.12 * Math.cos(time * 31));
+    stars.size = 0.25 + phasePulse * 0.17;
+    for (const line of pulses) line.visible = fever;
+    pulseMaterial.opacity = 0.22 + 0.68 * Math.sin(time * 7) ** 2;
+    shield.material.opacity = 0.21 + Math.sin(time * 8) * 0.08;
+    droneEffects.update(run, dt, time, fever, ignition, idle);
+  }
+
+  function resetPresentation() {
+    followX = roll = pullback = 0;
+    droneEffects.reset();
+  }
+
+  return { make, pose, present, resetPresentation, effects, render: () => renderer.render(scene, camera) };
 }

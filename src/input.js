@@ -1,4 +1,4 @@
-export function bindInput(canvas, commands) {
+export function bindInput(canvas, commands, isPlaying) {
   const keys = {
     arrowleft: 'left', a: 'left',
     arrowright: 'right', d: 'right',
@@ -10,7 +10,7 @@ export function bindInput(canvas, commands) {
   window.addEventListener('keydown', event => {
     const action = keys[event.key.toLowerCase()];
     if (typeof action !== 'string') return;
-    if (event.key === ' ' && event.target instanceof HTMLButtonElement) return;
+    if (event.key === ' ' && event.target instanceof HTMLButtonElement && !isPlaying()) return;
     event.preventDefault();
     if (!event.repeat) commands[action]();
   });

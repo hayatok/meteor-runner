@@ -16,6 +16,7 @@ MODEL = sys.argv[1] if len(sys.argv) > 1 else "gpt-6.2-sol"
 FILES = [
     "docs/GAME_DESIGN.md",
     "docs/UPDATE_V2.md",
+    "docs/UPDATE_V3.md",
     "package.json",
     "vite.config.js",
     "index.html",
@@ -28,6 +29,10 @@ FILES = [
     "src/audio.js",
     "src/effects.js",
     "src/missions.js",
+    "src/style.css",
+    "src/drone-effects.js",
+    "src/presentation.js",
+    "src/particles.js",
 ]
 
 parts = []

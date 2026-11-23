@@ -28,7 +28,60 @@ export function createUI() {
   const miss = get('near-miss');
   const toasts = get('mission-toasts');
   const missionList = get('missions');
+  const chain = get('chain');
+  const countdown = get('countdown');
+  const resultScore = get('result-score');
+  const resultRank = get('result-rank');
+  const animations = new Map();
   let missAnimation;
+  let results;
+
+  function animate(element, frames, options) {
+    animations.get(element)?.cancel();
+    const animation = element.animate(frames, options);
+    animations.set(element, animation);
+    return animation;
+  }
+
+  function banner(id, message) {
+    const element = get(id);
+    element.textContent = message;
+    animate(element, [
+      { opacity: 0, transform: 'translateX(50px)' },
+      { opacity: 1, transform: 'translateX(0)', offset: 0.19 },
+      { opacity: 1, transform: 'translateX(0)', offset: 0.74 },
+      { opacity: 0, transform: 'translateX(-55px)' },
+    ], { duration: 1450, fill: 'both' });
+  }
+
+  function showChain(count, ended = false) {
+    chain.textContent = ended ? `CHAIN ×${count} END` : `CHAIN ×${count}`;
+    const size = ended ? 0.78 : Math.min(1.55, 0.95 + count * 0.07);
+    chain.style.color = ended ? '#f5ead9' : `color-mix(in srgb, #f5ead9, #ffd94d ${Math.min(100, count * 14)}%)`;
+    animate(chain, [
+      { opacity: 1, transform: `scale(${size * 1.13})` },
+      { opacity: 1, transform: `scale(${size})`, offset: 0.25 },
+      { opacity: 0, transform: `translateY(-7px) scale(${size})` },
+    ], { duration: ended ? 550 : 760, fill: 'forwards' });
+  }
+
+  function count(label) {
+    countdown.hidden = false;
+    countdown.textContent = label;
+    animate(countdown, [
+      { opacity: 0, transform: 'scale(.32)' },
+      { opacity: 1, transform: 'scale(1.12)', offset: 0.24 },
+      { opacity: 1, transform: 'scale(1)', offset: 0.67 },
+      { opacity: 0, transform: 'scale(1.18)' },
+    ], { duration: label === 'GO!' ? 570 : 900, fill: 'both' });
+  }
+
+  function flashScreen(kind) {
+    flash.dataset.effect = kind;
+    animate(flash, [{ opacity: kind === 'crash' ? 0.96 : 0.78 }, { opacity: 0 }], {
+      duration: kind === 'gate' ? 510 : 310, easing: 'ease-out', fill: 'forwards',
+    });
+  }
 
   function setText(element, value) {
     if (element.textContent !== value) element.textContent = value;
@@ -40,9 +93,9 @@ export function createUI() {
 
   function show(state) {
     for (const screen of ['title', 'paused', 'results', 'error']) get(screen).hidden = screen !== state;
-    hud.hidden = !['playing', 'paused', 'crashing'].includes(state);
+    hud.hidden = !['countdown', 'playing', 'paused', 'impact', 'crashing'].includes(state);
+    if (!['countdown', 'playing'].includes(state)) countdown.hidden = true;
     if (state === 'title') get('title-best').textContent = bestText();
-    if (state !== 'playing') flash.style.opacity = 0;
     const button = { paused: 'resume', results: 'restart' }[state];
     if (button) get(button).focus({ preventScroll: true });
   }
@@ -56,7 +109,7 @@ export function createUI() {
     if (run.shield) effects.push('シールド');
     if (run.magnet > 0) effects.push(`マグネット ${Math.ceil(run.magnet)} 秒`);
     setText(power, effects.join('　'));
-    flash.style.opacity = run.flash / 0.27 * 0.24;
+
   }
 
   function missionItem(mission) {
@@ -68,6 +121,9 @@ export function createUI() {
 
   function start(run) {
     missAnimation?.cancel();
+    for (const animation of animations.values()) animation.cancel();
+    animations.clear();
+    results = null;
     miss.textContent = '';
     toasts.replaceChildren();
     missionList.replaceChildren(...run.missions.map(missionItem));
@@ -108,14 +164,45 @@ export function createUI() {
         // The record remains available for the current session.
       }
     }
-    get('result-score').textContent = number(run.score);
+    results = { elapsed: 0, score: run.score, shown: 0, tick: 0, rank: scoreRank(run.score) };
+    resultScore.textContent = number(0);
+    resultRank.style.opacity = 0;
     get('result-distance').textContent = meters(run.distance);
     get('result-misses').textContent = number(run.nearMisses);
     get('result-best').textContent = bestText();
-    get('result-rank').textContent = `ランク ${scoreRank(run.score)}`;
+    resultRank.textContent = '';
     get('result-missions').replaceChildren(...run.missions.map(missionItem));
     get('result-mission-points').textContent = `ミッションボーナス +${number(run.missionPoints)} 点`;
   }
 
-  return { finish, show, update, start, nearMiss, missionComplete, setMuted };
+  function updateResults(dt, play, celebrate) {
+    if (!results) return;
+    results.elapsed += dt;
+    const progress = Math.min(1, results.elapsed / 1.15);
+    const displayed = Math.floor(results.score * (1 - (1 - progress) ** 2));
+    if (displayed !== results.shown) {
+      results.shown = displayed;
+      resultScore.textContent = number(displayed);
+      if (results.elapsed >= results.tick) {
+        play('tick');
+        results.tick = results.elapsed + 0.065;
+      }
+    }
+    if (results.elapsed < 1.24) return;
+    const { rank } = results;
+    resultRank.textContent = `ランク ${rank}`;
+    resultRank.style.opacity = 1;
+    animate(resultRank, [
+      { opacity: 0, transform: 'scale(2.4) rotate(-13deg)' },
+      { opacity: 1, transform: 'scale(.9) rotate(3deg) translateX(5px)', offset: 0.34 },
+      { transform: 'scale(1.04) rotate(-2deg) translateX(-4px)', offset: 0.55 },
+      { transform: 'scale(1) rotate(0) translateX(0)' },
+    ], { duration: 380, easing: 'ease-out' });
+    play('stamp');
+    if (rank === 'S' || rank === 'A') celebrate();
+    results = null;
+  }
+
+  return { finish, show, update, updateResults, start, nearMiss, missionComplete, setMuted,
+    count, showChain, banner, flashScreen };
 }
