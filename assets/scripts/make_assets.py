@@ -127,7 +127,7 @@ def torus(name, major, minor, loc, material, rot=(0, 0, 0)):
     o.name = name
     return finish_obj(o, material, smooth=True)
 
-def rock(name, radius, loc, material, seed, squash=1.0):
+def rock(name, radius, loc, material, seed, squash=1.0, disp=0.22):
     rng = random.Random(seed)
     bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=radius,
                                           location=loc)
@@ -136,12 +136,12 @@ def rock(name, radius, loc, material, seed, squash=1.0):
     me = o.data
     for v in me.vertices:
         n = v.co.normalized()
-        f = 1.0 + rng.uniform(-0.28, 0.28)
+        f = 1.0 + rng.uniform(-disp, disp)
         v.co = n * radius * f
     o.scale = (1.0, 1.0, squash)
+    # NOTE: transform_apply defaults bake location+rotation too, which is
+    # what we want (world-space geometry, zeroed loc). Do NOT re-set location.
     bpy.ops.object.transform_apply(scale=True)
-    # location was reset by transform_apply? no - scale only. restore loc:
-    o.location = loc
     return finish_obj(o, material, smooth=False)
 
 def crystal_spike(name, r, h, loc, material=TEAL_E, tilt=(0, 0, 0)):
@@ -167,15 +167,15 @@ def build_drone():
     objs = []
     # main hull: streamlined, nose toward -Y
     objs.append(sphere("Hull", 0.5, (0, 0.05, 0.40), CREAM,
-                       scale=(1.05, 1.5, 0.66)))
+                       scale=(1.05, 1.35, 0.66)))
     # glass canopy = visor band across the front (protrudes past the hull)
-    objs.append(sphere("Visor", 0.36, (0, -0.55, 0.42), TEAL_G,
+    objs.append(sphere("Visor", 0.36, (0, -0.48, 0.42), TEAL_G,
                        scale=(0.95, 1.0, 0.66)))
     # thin emissive eye-strip on the canopy
-    objs.append(box("EyeStrip", (0.40, 0.04, 0.07), (0, -0.885, 0.50),
+    objs.append(box("EyeStrip", (0.40, 0.04, 0.07), (0, -0.80, 0.50),
                     TEAL_E, bevel=0.015))
     # top spine fin + rear fin
-    objs.append(box("FinTop", (0.05, 0.55, 0.20), (0, 0.42, 0.66), TEAL_DK,
+    objs.append(box("FinTop", (0.05, 0.55, 0.18), (0, 0.36, 0.62), TEAL_DK,
                     bevel=0.02, rot=(math.radians(-18), 0, 0)))
     objs.append(box("FinL", (0.34, 0.30, 0.04), (-0.28, 0.62, 0.52), TEAL_DK,
                     bevel=0.015))
@@ -183,11 +183,11 @@ def build_drone():
                     bevel=0.015))
     # side pods with orange thrusters at the rear (+Y)
     for s in (-1, 1):
-        objs.append(cyl("Pod", 0.17, 0.85, (0.55 * s, 0.10, 0.34), CREAM_D,
+        objs.append(cyl("Pod", 0.17, 0.85, (0.50 * s, 0.10, 0.34), CREAM_D,
                         rot=(math.radians(90), 0, 0)))
-        objs.append(cyl("Thruster", 0.115, 0.06, (0.55 * s, 0.545, 0.34),
+        objs.append(cyl("Thruster", 0.115, 0.06, (0.50 * s, 0.545, 0.34),
                         ORANGE_E, rot=(math.radians(90), 0, 0)))
-        objs.append(cyl("PodRing", 0.175, 0.08, (0.55 * s, -0.22, 0.34),
+        objs.append(cyl("PodRing", 0.175, 0.08, (0.50 * s, -0.22, 0.34),
                         DARK, rot=(math.radians(90), 0, 0)))
     # belly light strip
     objs.append(box("BellyGlow", (0.30, 0.70, 0.04), (0, 0.0, 0.085), TEAL_E,
@@ -195,7 +195,8 @@ def build_drone():
     return objs
 
 def build_asteroid_a():
-    objs = [rock("RockA", 0.8, (0, 0, 0.72), ROCK, seed=11, squash=0.9)]
+    objs = [rock("RockA", 0.8, (0, 0, 0.75), ROCK, seed=11, squash=0.9,
+                 disp=0.18)]
     objs.append(crystal_spike("CrysA1", 0.13, 0.55, (0.42, -0.25, 1.25),
                               tilt=(math.radians(18), math.radians(-12), 0)))
     objs.append(crystal_spike("CrysA2", 0.09, 0.38, (-0.45, 0.28, 1.05),
@@ -204,15 +205,15 @@ def build_asteroid_a():
 
 def build_asteroid_b():
     objs = []
-    objs.append(rock("RockB1", 0.95, (-0.45, 0.1, 0.80), ROCK, seed=23,
-                     squash=0.9))
-    objs.append(rock("RockB2", 0.62, (0.62, -0.25, 0.55), ROCK2, seed=37,
-                     squash=0.95))
-    objs.append(rock("RockB3", 0.48, (0.35, 0.55, 0.42), ROCK, seed=51,
-                     squash=1.0))
-    objs.append(crystal_spike("CrysB1", 0.15, 0.7, (-0.5, 0.05, 1.62),
+    objs.append(rock("RockB1", 0.75, (-0.35, 0.05, 0.62), ROCK, seed=23,
+                     squash=0.9, disp=0.20))
+    objs.append(rock("RockB2", 0.50, (0.44, -0.18, 0.42), ROCK2, seed=37,
+                     squash=0.95, disp=0.20))
+    objs.append(rock("RockB3", 0.38, (0.26, 0.40, 0.32), ROCK, seed=51,
+                     squash=1.0, disp=0.20))
+    objs.append(crystal_spike("CrysB1", 0.14, 0.62, (-0.38, 0.02, 1.28),
                               tilt=(math.radians(10), math.radians(-8), 0)))
-    objs.append(crystal_spike("CrysB2", 0.10, 0.45, (0.72, -0.3, 1.0),
+    objs.append(crystal_spike("CrysB2", 0.09, 0.40, (0.52, -0.22, 0.82),
                               tilt=(math.radians(-16), math.radians(14), 0)))
     return objs
 
@@ -220,13 +221,13 @@ def build_crystal():
     objs = []
     objs.append(box("Base", (1.8, 1.1, 0.16), (0, 0, 0.08), ROCK2, bevel=0.05))
     spikes = [  # (x, y, r, h, tilt_x, tilt_y)
-        (-0.62, 0.1, 0.20, 0.70, 0.10, -0.14),
-        (-0.22, -0.18, 0.24, 0.62, -0.12, -0.05),
-        (0.18, 0.16, 0.27, 0.68, 0.06, 0.10),
-        (0.58, -0.12, 0.19, 0.52, -0.08, 0.16),
-        (0.0, 0.30, 0.15, 0.40, 0.16, 0.0),
-        (-0.42, -0.32, 0.13, 0.34, -0.18, -0.10),
-        (0.42, 0.34, 0.12, 0.30, 0.14, 0.08),
+        (-0.62, 0.1, 0.20, 0.60, 0.10, -0.14),
+        (-0.22, -0.18, 0.24, 0.53, -0.12, -0.05),
+        (0.18, 0.16, 0.27, 0.58, 0.06, 0.10),
+        (0.58, -0.12, 0.19, 0.44, -0.08, 0.16),
+        (0.0, 0.30, 0.15, 0.34, 0.16, 0.0),
+        (-0.42, -0.32, 0.13, 0.29, -0.18, -0.10),
+        (0.42, 0.34, 0.12, 0.26, 0.14, 0.08),
     ]
     for i, (x, y, r, h, tx, ty) in enumerate(spikes):
         objs.append(crystal_spike(f"Spike{i}", r, h, (x, y, 0.14 + h / 2),

@@ -4,6 +4,10 @@ export const initialSpeed = 18;
 const obstacles = ['asteroid_a', 'asteroid_b', 'crystal', 'barrier'];
 const gateSpacing = 125;
 const spawnAhead = 100;
+const obstacleSpawnStart = 120;
+const firstObstacleRow = obstacleSpawnStart + 30;
+const obstacleRampEnd = 600;
+const nearMissWidth = 2.6;
 
 function pick(items) {
   return items[Math.floor(Math.random() * items.length)];
@@ -79,7 +83,7 @@ export class Runner {
     item.x = x;
     item.y = y;
     item.pull = 0;
-    item.gap = Infinity;
+    item.nearMiss = false;
     item.hit = false;
     item.object.position.set(x, y, this.distance - distance);
     item.object.rotation.set(0, 0, 0);
@@ -98,7 +102,10 @@ export class Runner {
   spawnRow() {
     const remaining = [...lanes];
     const difficulty = (this.speed - initialSpeed) / (46 - initialSpeed);
-    const count = Math.random() < 0.16 + difficulty * 0.64 ? 2 : 1;
+    const hasObstacles = this.nextRow >= firstObstacleRow;
+    const ramp = clamp((this.nextRow - firstObstacleRow) / (obstacleRampEnd - firstObstacleRow), 0, 1);
+    const doubleChance = ramp * (0.16 + difficulty * 0.64);
+    const count = hasObstacles ? (Math.random() < doubleChance ? 2 : 1) : 0;
     // Each row has an open lane. The minimum row gap allows two full lane moves.
     for (let i = 0; i < count; i++) {
       const x = remaining.splice(Math.floor(Math.random() * remaining.length), 1)[0];
@@ -114,7 +121,15 @@ export class Runner {
     if (Math.random() < 0.24) {
       this.spawn(pick(['shield', 'magnet']), x, 0.35, this.nextRow + 7);
     }
-    this.nextRow += this.speed * (1.65 - difficulty * 1.06 + Math.random() * 0.23);
+    const normalInterval = 1.65 - difficulty * 1.06;
+    const interval = hasObstacles ? 2.75 + (normalInterval - 2.75) * ramp : normalInterval;
+    this.nextRow += this.speed * (interval + Math.random() * 0.23);
+    if (!hasObstacles) this.nextRow = Math.min(this.nextRow, firstObstacleRow);
+  }
+
+  laneX(time) {
+    const t = clamp(time / 0.12, 0, 1);
+    return this.fromX + (lanes[this.lane] - this.fromX) * t * t * (3 - 2 * t);
   }
 
   advance(dt) {
@@ -123,16 +138,19 @@ export class Runner {
     this.distance += this.speed * dt;
     this.magnet = Math.max(0, this.magnet - dt);
     this.flash = Math.max(0, this.flash - dt);
-    this.laneTime = Math.min(0.12, this.laneTime + dt);
-    const t = this.laneTime / 0.12;
-    this.x = this.fromX + (lanes[this.lane] - this.fromX) * t * t * (3 - 2 * t);
+    const laneTime = this.laneTime + dt;
+    this.laneTime = Math.min(0.12, laneTime);
+    this.x = this.laneX(laneTime);
     this.jump = Math.max(0, this.jump - dt);
     this.dive = Math.max(0, this.dive - dt);
     const hover = 0.44 + Math.sin(this.elapsed * 8) * 0.035;
     const targetY = this.dive > 0 ? 0.11 : hover + 1.48 * Math.sin(Math.PI * this.jump / 0.82);
     this.y += (targetY - this.y) * Math.min(1, dt * (this.dive > 0 ? 34 : 24));
 
-    while (this.nextRow - this.distance < spawnAhead) this.spawnRow();
+    while (this.nextRow - this.distance < spawnAhead
+      && (this.nextRow < firstObstacleRow || this.distance >= obstacleSpawnStart)) {
+      this.spawnRow();
+    }
     while (this.nextGate - this.distance < spawnAhead) {
       this.spawn('gate', 0, 0, this.nextGate);
       this.nextGate += gateSpacing;
@@ -144,7 +162,7 @@ export class Runner {
       item.object.position.z = z;
 
       if (obstacles.includes(item.kind)) {
-        if (this.passObstacle(item, z) || z > 9) this.recycle(i);
+        if (this.passObstacle(item, z, dt, laneTime) || z > 9) this.recycle(i);
         if (this.dead) break;
       } else if (item.kind === 'gate') {
         if (!item.hit && z >= 0) {
@@ -161,13 +179,17 @@ export class Runner {
     this.world.pose(this);
   }
 
-  passObstacle(item, z) {
+  passObstacle(item, z, dt, laneTime) {
     if (item.hit) return false;
+    const timeSincePass = z / this.speed;
+    if (timeSincePass >= 0 && timeSincePass < dt) {
+      const passX = this.laneX(laneTime - timeSincePass);
+      item.nearMiss = Math.abs(passX - item.x) < nearMissWidth;
+    }
     const depth = item.kind === 'asteroid_b' ? 1.12 : item.kind === 'asteroid_a' ? 0.94 : 0.66;
     const width = item.kind === 'asteroid_b' ? 1.16 : 1.08;
     if (Math.abs(z) <= depth) {
       const gap = Math.abs(this.x - item.x);
-      item.gap = Math.min(item.gap, gap);
       const cleared = (item.kind === 'crystal' && this.y >= 0.72)
         || (item.kind === 'barrier' && this.dive > 0 && this.y <= 0.38);
       if (gap < width && !cleared) {
@@ -179,10 +201,13 @@ export class Runner {
         }
         this.dead = true;
       }
-    } else if (z > depth && item.gap <= 1.2) {
+    } else if (z > depth) {
+      // Award only after the collision window closes, using the gap at the crossing.
       item.hit = true;
-      this.nearMisses++;
-      this.combo++;
+      if (item.nearMiss) {
+        this.nearMisses++;
+        this.combo++;
+      }
     }
     return false;
   }
