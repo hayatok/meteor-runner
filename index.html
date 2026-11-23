@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#232a52">
+    <title>メテオランナー ― 星屑航路</title>
+    <script type="module" crossorigin src="./assets/index-DxJRSCST.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-qvMY9u8U.css">
+  </head>
+  <body>
+    <main id="game">
+      <div id="crash-glow" aria-hidden="true"></div>
+      <div id="flash" aria-hidden="true"></div>
+      <div id="countdown" aria-live="polite" hidden></div>
+      <section id="hud" aria-label="走行データ" hidden>
+        <div class="stats">
+          <div>スコア <strong id="score">0</strong></div>
+          <div>距離 <strong id="distance">0 m</strong></div>
+          <div>コンボ <strong id="combo">×1.0</strong></div>
+          <div>速度 <strong id="speed">18.0 m/s</strong></div>
+        </div>
+        <button id="pause" aria-label="一時停止">一時停止</button>
+        <div id="power" class="power"></div>
+        <ul id="missions" aria-label="ランミッション"></ul>
+        <div id="event-banners" aria-live="polite">
+          <p id="phase-banner"></p>
+          <p id="fever-banner"></p>
+        </div>
+        <div id="hud-pops">
+          <p id="chain" aria-live="polite"></p>
+          <p id="near-miss" aria-live="polite"></p>
+        </div>
+        <div id="mission-toasts" aria-live="polite"></div>
+      </section>
+      <section class="overlay" id="title">
+        <div class="panel">
+          <p class="subtitle">星屑航路</p>
+          <h1>メテオランナー</h1>
+          <p>夕闇の隕石帯を貫く古代の航路。配達ドローン「ピコ」とともに、荷物を背負って星屑の宙を駆け抜けよう。</p>
+          <p class="record" id="title-best"></p>
+          <button class="primary" id="start">出発</button>
+          <p class="controls">← → / A D で移動 · ↑ / W / Space でジャンプ · ↓ / S でダイブ<br>スマホではスワイプ、または左右タップで移動</p>
+        </div>
+      </section>
+      <section class="overlay" id="paused" hidden>
+        <div class="panel">
+          <h2>一時停止</h2>
+          <button class="primary" id="resume">再開</button>
+        </div>
+      </section>
+      <section class="overlay" id="results" hidden>
+        <div class="panel">
+          <p class="subtitle">星屑航路</p>
+          <h2>走行終了</h2>
+          <p class="rank" id="result-rank"></p>
+          <dl>
+            <div><dt>距離</dt><dd id="result-distance"></dd></div>
+            <div><dt>スコア</dt><dd id="result-score"></dd></div>
+            <div><dt>ニアミス</dt><dd id="result-misses"></dd></div>
+          </dl>
+          <p class="record" id="result-best"></p>
+          <ul id="result-missions" aria-label="ミッション結果"></ul>
+          <p id="result-mission-points"></p>
+          <button class="primary" id="restart">もう一度走る</button>
+        </div>
+      </section>
+      <section class="overlay" id="error" hidden>
+        <div class="panel">
+          <h2>ゲームを表示できません</h2>
+          <p>WebGL を初期化できませんでした。WebGL が有効なブラウザでページを開いてください。</p>
+        </div>
+      </section>
+      <button id="mute" aria-label="ミュート (M)" aria-pressed="false">音あり</button>
+    </main>
+  </body>
+</html>
