@@ -18,6 +18,9 @@
         </div>
         <button id="pause" aria-label="一時停止">一時停止</button>
         <div id="power" class="power"></div>
+        <ul id="missions" aria-label="ランミッション"></ul>
+        <p id="near-miss" aria-live="polite"></p>
+        <div id="mission-toasts" aria-live="polite"></div>
       </section>
       <section class="overlay" id="title">
         <div class="panel">
@@ -39,12 +42,15 @@
         <div class="panel">
           <p class="subtitle">星屑航路</p>
           <h2>走行終了</h2>
+          <p class="rank" id="result-rank"></p>
           <dl>
             <div><dt>距離</dt><dd id="result-distance"></dd></div>
             <div><dt>スコア</dt><dd id="result-score"></dd></div>
             <div><dt>ニアミス</dt><dd id="result-misses"></dd></div>
           </dl>
           <p class="record" id="result-best"></p>
+          <ul id="result-missions" aria-label="ミッション結果"></ul>
+          <p id="result-mission-points"></p>
           <button class="primary" id="restart">もう一度走る</button>
         </div>
       </section>
@@ -54,6 +60,7 @@
           <p>WebGL を初期化できませんでした。WebGL が有効なブラウザでページを開いてください。</p>
         </div>
       </section>
+      <button id="mute" aria-label="ミュート (M)" aria-pressed="false">音あり</button>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>

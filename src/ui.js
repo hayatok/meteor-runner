@@ -1,3 +1,4 @@
+import { missionBonus, scoreRank } from './missions.js';
 import { multiplier } from './runner.js';
 
 const key = 'meteor-runner.best';
@@ -24,6 +25,10 @@ export function createUI() {
   const speed = get('speed');
   const power = get('power');
   const hud = get('hud');
+  const miss = get('near-miss');
+  const toasts = get('mission-toasts');
+  const missionList = get('missions');
+  let missAnimation;
 
   function setText(element, value) {
     if (element.textContent !== value) element.textContent = value;
@@ -35,7 +40,7 @@ export function createUI() {
 
   function show(state) {
     for (const screen of ['title', 'paused', 'results', 'error']) get(screen).hidden = screen !== state;
-    hud.hidden = state !== 'playing' && state !== 'paused';
+    hud.hidden = !['playing', 'paused', 'crashing'].includes(state);
     if (state === 'title') get('title-best').textContent = bestText();
     if (state !== 'playing') flash.style.opacity = 0;
     const button = { paused: 'resume', results: 'restart' }[state];
@@ -54,6 +59,45 @@ export function createUI() {
     flash.style.opacity = run.flash / 0.27 * 0.24;
   }
 
+  function missionItem(mission) {
+    const item = document.createElement('li');
+    item.textContent = `${mission.done ? '達成' : '未達成'} · ${mission.label}`;
+    item.classList.toggle('completed', mission.done);
+    return item;
+  }
+
+  function start(run) {
+    missAnimation?.cancel();
+    miss.textContent = '';
+    toasts.replaceChildren();
+    missionList.replaceChildren(...run.missions.map(missionItem));
+  }
+
+  function nearMiss(combo) {
+    missAnimation?.cancel();
+    miss.textContent = `NEAR MISS ×${combo}`;
+    missAnimation = miss.animate([
+      { opacity: 1, transform: 'translateY(0)' },
+      { opacity: 1, offset: 0.25 },
+      { opacity: 0, transform: 'translateY(-12px)' },
+    ], { duration: 800, fill: 'forwards' });
+  }
+
+  function missionComplete(run, label) {
+    missionList.replaceChildren(...run.missions.map(missionItem));
+    const toast = document.createElement('p');
+    toast.textContent = `${label} 達成  +${missionBonus} 点`;
+    toasts.append(toast);
+    toast.animate([{ opacity: 1 }, { opacity: 1, offset: 0.75 }, { opacity: 0 }], 2400)
+      .onfinish = () => toast.remove();
+  }
+
+  function setMuted(muted) {
+    const button = get('mute');
+    button.setAttribute('aria-pressed', String(muted));
+    button.textContent = muted ? '消音' : '音あり';
+  }
+
   function finish(run) {
     const next = { score: Math.max(best.score, run.score), distance: Math.max(best.distance, Math.floor(run.distance)) };
     if (next.score !== best.score || next.distance !== best.distance) {
@@ -68,8 +112,10 @@ export function createUI() {
     get('result-distance').textContent = meters(run.distance);
     get('result-misses').textContent = number(run.nearMisses);
     get('result-best').textContent = bestText();
-    show('results');
+    get('result-rank').textContent = `ランク ${scoreRank(run.score)}`;
+    get('result-missions').replaceChildren(...run.missions.map(missionItem));
+    get('result-mission-points').textContent = `ミッションボーナス +${number(run.missionPoints)} 点`;
   }
 
-  return { finish, show, update };
+  return { finish, show, update, start, nearMiss, missionComplete, setMuted };
 }

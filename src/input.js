@@ -4,7 +4,7 @@ export function bindInput(canvas, commands) {
     arrowright: 'right', d: 'right',
     arrowup: 'jump', w: 'jump', ' ': 'jump',
     arrowdown: 'dive', s: 'dive',
-    escape: 'pause',
+    escape: 'pause', m: 'mute',
   };
 
   window.addEventListener('keydown', event => {

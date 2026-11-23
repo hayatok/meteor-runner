@@ -1,7 +1,11 @@
+import { missionBonus, selectMissions } from './missions.js';
+
 export const lanes = [-2.2, 0, 2.2];
 export const initialSpeed = 18;
 
-const obstacles = ['asteroid_a', 'asteroid_b', 'crystal', 'barrier'];
+const obstacleHalfWidth = { asteroid_a: 0.8, asteroid_b: 1.0, crystal: 0.9, barrier: 1.0 };
+const obstacles = Object.keys(obstacleHalfWidth);
+const playerHalfWidth = 0.5;
 const gateSpacing = 125;
 const spawnAhead = 100;
 const obstacleSpawnStart = 120;
@@ -22,8 +26,9 @@ export function multiplier(combo) {
 }
 
 export class Runner {
-  constructor(world) {
+  constructor(world, emit = () => {}) {
     this.world = world;
+    this.emit = emit;
     this.active = [];
     this.pool = new Map();
     this.reset();
@@ -36,6 +41,12 @@ export class Runner {
     this.bonus = 0;
     this.combo = 0;
     this.nearMisses = 0;
+    this.maxCombo = 0;
+    this.shards = 0;
+    this.gates = 0;
+    this.shields = 0;
+    this.missionPoints = 0;
+    this.missions = selectMissions();
     this.shield = false;
     this.magnet = 0;
     this.flash = 0;
@@ -48,6 +59,7 @@ export class Runner {
     this.dive = 0;
     this.y = 0.44;
     this.dead = false;
+    this.crashTravel = 0;
     this.nextRow = 32;
     this.nextGate = gateSpacing;
     this.world.pose(this);
@@ -68,11 +80,13 @@ export class Runner {
   leap() {
     if (this.jump > 0 || this.dive > 0) return;
     this.jump = 0.82;
+    this.emit('jump');
   }
 
   duck() {
     this.jump = 0;
     this.dive = 0.64;
+    this.emit('dive');
   }
 
   spawn(kind, x, y, distance) {
@@ -82,7 +96,7 @@ export class Runner {
     item.distance = distance;
     item.x = x;
     item.y = y;
-    item.pull = 0;
+    item.pullX = item.pullY = item.pullZ = 0;
     item.nearMiss = false;
     item.hit = false;
     item.object.position.set(x, y, this.distance - distance);
@@ -159,7 +173,7 @@ export class Runner {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const item = this.active[i];
       const z = this.distance - item.distance;
-      item.object.position.z = z;
+      if (item.kind !== 'shard') item.object.position.z = z;
 
       if (obstacles.includes(item.kind)) {
         if (this.passObstacle(item, z, dt, laneTime) || z > 9) this.recycle(i);
@@ -169,6 +183,8 @@ export class Runner {
           item.hit = true;
           this.bonus += 50;
           this.flash = 0.27;
+          this.gates++;
+          this.emit('gate');
         }
         if (z > 14) this.recycle(i);
       } else if (this.collect(item, z, dt) || z > 8) {
@@ -176,7 +192,21 @@ export class Runner {
       }
     }
 
-    this.world.pose(this);
+    for (const mission of this.missions) {
+      if (mission.done || !mission.reached(this)) continue;
+      mission.done = true;
+      this.missionPoints += missionBonus;
+      this.bonus += missionBonus;
+      this.emit('mission', mission.label);
+    }
+  }
+
+  advanceCrash(dt) {
+    // Continue the scene motion while keeping the final score and distance fixed.
+    this.elapsed += dt;
+    this.crashTravel += this.speed * dt;
+    for (const item of this.active) item.object.position.z += this.speed * dt;
+    this.world.pose(this, this.crashTravel);
   }
 
   passObstacle(item, z, dt, laneTime) {
@@ -187,7 +217,7 @@ export class Runner {
       item.nearMiss = Math.abs(passX - item.x) < nearMissWidth;
     }
     const depth = item.kind === 'asteroid_b' ? 1.12 : item.kind === 'asteroid_a' ? 0.94 : 0.66;
-    const width = item.kind === 'asteroid_b' ? 1.16 : 1.08;
+    const width = playerHalfWidth + obstacleHalfWidth[item.kind];
     if (Math.abs(z) <= depth) {
       const gap = Math.abs(this.x - item.x);
       const cleared = (item.kind === 'crystal' && this.y >= 0.72)
@@ -195,11 +225,13 @@ export class Runner {
       if (gap < width && !cleared) {
         item.hit = true;
         this.combo = 0;
+        this.emit('collision');
         if (this.shield) {
           this.shield = false;
           return true;
         }
         this.dead = true;
+        this.emit('crash');
       }
     } else if (z > depth) {
       // Award only after the collision window closes, using the gap at the crossing.
@@ -207,6 +239,8 @@ export class Runner {
       if (item.nearMiss) {
         this.nearMisses++;
         this.combo++;
+        this.maxCombo = Math.max(this.combo, this.maxCombo);
+        this.emit('nearMiss', this.combo);
       }
     }
     return false;
@@ -215,18 +249,28 @@ export class Runner {
   collect(item, z, dt) {
     const position = item.object.position;
     item.object.rotation.y += dt * 2.7;
-    if (item.kind === 'shard' && this.magnet > 0 && Math.abs(z) < 7) {
-      item.pull = Math.min(1, item.pull + dt * 5);
-      position.x += (this.x - position.x) * dt * 16;
-      position.y += (this.y + 0.1 - position.y) * dt * 16;
-      position.z *= 1 - item.pull;
+    if (item.kind === 'shard') {
+      const attracting = this.magnet > 0 && Math.abs(z) < 7;
+      const blend = 1 - Math.exp(-dt * (attracting ? 16 : 8));
+      item.pullX += ((attracting ? this.x - item.x : 0) - item.pullX) * blend;
+      item.pullY += ((attracting ? this.y + 0.1 - item.y : 0) - item.pullY) * blend;
+      item.pullZ += ((attracting ? -z : 0) - item.pullZ) * blend;
+      position.set(item.x + item.pullX, item.y + item.pullY, z + item.pullZ);
     }
     const collected = Math.abs(position.z) < 0.85
       && Math.abs(position.x - this.x) < 0.72
       && Math.abs(position.y - this.y) < 0.58;
     if (!collected) return false;
-    if (item.kind === 'shard') this.bonus += 25 * multiplier(this.combo);
-    if (item.kind === 'shield') this.shield = true;
+    if (item.kind === 'shard') {
+      this.shards++;
+      this.bonus += 25 * multiplier(this.combo);
+      this.emit('shard', position, this.combo);
+    }
+    if (item.kind === 'shield') {
+      this.shields++;
+      this.shield = true;
+    }
+    if (item.kind !== 'shard') this.emit(item.kind);
     if (item.kind === 'magnet') this.magnet = 6;
     return true;
   }

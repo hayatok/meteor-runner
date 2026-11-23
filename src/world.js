@@ -1,14 +1,16 @@
 import * as THREE from 'three';
 import { createModels } from './models.js';
+import { createEffects } from './effects.js';
 
+const indigo = new THREE.Color('#232a52');
 const phaseColors = [
-  ['#232a52', '#fde0bb', '#ff8c42'],
-  ['#292d59', '#dfd0ff', '#a480e1'],
-  ['#152447', '#b5e2ff', '#2ec4b6'],
-  ['#100f2f', '#a9bbff', '#3e6eb4'],
-  ['#1b1a44', '#b4b8ff', '#8462d5'],
-  ['#593d59', '#fff0d1', '#ff8c42'],
-].map(colors => colors.map(color => new THREE.Color(color)));
+  [0, 500, indigo, '#f5ead9', '#ff8c42'],
+  [500, 1500, indigo.clone().multiplyScalar(0.62), '#f5ead9', '#2ec4b6'],
+  [1500, 2500, indigo.clone().multiplyScalar(0.24), '#2ec4b6', '#232a52'],
+  [2500, 3500, indigo.clone().multiplyScalar(1.35), '#f5ead9', '#ffd94d'],
+].map(([start, end, sky, fill, sun]) => ({
+  start, end, sky, fill: new THREE.Color(fill), sun: new THREE.Color(sun),
+}));
 
 function addStars(scene) {
   const positions = [];
@@ -47,11 +49,12 @@ export function createWorld(container, renderer) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
   scene.fog = new THREE.FogExp2('#232a52', 0.016);
-  const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 245);
-  const fill = new THREE.HemisphereLight('#fde0bb', '#393658', 2);
+  const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 245);
+  const fill = new THREE.HemisphereLight('#f5ead9', '#232a52', 2);
   const sun = new THREE.DirectionalLight('#ff8c42', 2.1);
   sun.position.set(-3, 7, 5);
-  scene.add(fill, sun);
+  scene.add(fill, sun, camera);
+  const effects = createEffects(scene, camera);
   addStars(scene);
   addNebula(scene);
 
@@ -85,8 +88,6 @@ export function createWorld(container, renderer) {
   function resize() {
     const { clientWidth: width, clientHeight: height } = container;
     camera.aspect = width / Math.max(1, height);
-    // Preserve the track width in narrow portrait viewports.
-    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.max(0.5, 0.34 / camera.aspect)));
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
@@ -94,14 +95,21 @@ export function createWorld(container, renderer) {
   window.addEventListener('resize', resize);
   resize();
 
-  function pose(run) {
-    const { distance, x, y, elapsed, dive } = run;
+  function pose(run, coast = 0) {
+    const { x, y, elapsed, dive } = run;
+    const distance = run.distance + coast;
     drone.position.set(x, y, 0);
     drone.scale.y = dive > 0 ? 0.59 : 1;
     drone.rotation.set(dive > 0 ? -0.14 : 0, 0, Math.sin(Math.PI * run.laneTime / 0.12) * (run.fromX - x) * 0.23);
     shield.visible = run.shield;
     shield.rotation.y = elapsed * 1.3;
-    camera.position.set(x * 0.22, 3.65, 6.7);
+    const fov = THREE.MathUtils.lerp(62, 74, (run.speed - 18) / (46 - 18));
+    if (camera.fov !== fov) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+    const cameraZ = Math.max(6.7, 2.55 / (Math.tan(THREE.MathUtils.degToRad(fov / 2)) * camera.aspect));
+    camera.position.set(x * 0.22, 3.65, cameraZ);
     camera.lookAt(x * 0.12, 0.75, -8);
 
     for (let i = 0; i < deck.length; i++) deck[i].position.z = 30 + distance % 30 - 30 * i;
@@ -110,16 +118,16 @@ export function createWorld(container, renderer) {
       rocks[i].rotation.set(elapsed * 0.13 + i, elapsed * 0.19 + i, i);
     }
 
-    const segment = (distance % 3000) / 500;
-    const index = Math.floor(segment);
-    const next = phaseColors[(index + 1) % phaseColors.length];
+    const cycle = distance % 3500;
+    const index = phaseColors.findIndex(phase => cycle < phase.end);
     const current = phaseColors[index];
-    const progress = THREE.MathUtils.smoothstep(segment - index, 0.53, 1);
-    scene.background.copy(current[0]).lerp(next[0], progress);
+    const next = phaseColors[(index + 1) % phaseColors.length];
+    const progress = THREE.MathUtils.smoothstep(cycle, current.end - (current.end - current.start) * 0.2, current.end);
+    scene.background.copy(current.sky).lerp(next.sky, progress);
     scene.fog.color.copy(scene.background);
-    fill.color.copy(current[1]).lerp(next[1], progress);
-    sun.color.copy(current[2]).lerp(next[2], progress);
+    fill.color.copy(current.fill).lerp(next.fill, progress);
+    sun.color.copy(current.sun).lerp(next.sun, progress);
   }
 
-  return { make, pose, render: () => renderer.render(scene, camera) };
+  return { make, pose, effects, render: () => renderer.render(scene, camera) };
 }
