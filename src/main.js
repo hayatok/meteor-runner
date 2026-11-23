@@ -61,7 +61,7 @@ function startGame(renderer) {
     ui.update(run);
     countdownTime = countdownIndex = 0;
     setState(fromTitle ? 'countdown' : 'playing');
-    presentation.count(fromTitle ? 0 : 3);
+    if (fromTitle) presentation.count(0);
   }
 
   function pause() {

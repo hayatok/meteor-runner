@@ -140,9 +140,9 @@ export function createWorld(container, renderer) {
   window.addEventListener('resize', resize);
   resize();
 
-  function pose(run, coast = 0) {
+  function pose(run, travelOffset = 0) {
     const { x, y, elapsed, dive } = run;
-    const distance = run.distance + coast;
+    const distance = run.distance + travelOffset;
     drone.position.set(x, y, 0);
     drone.scale.y = dive > 0 ? 0.59 : 1;
     drone.rotation.set(dive > 0 ? -0.14 : 0, 0, Math.sin(Math.PI * run.laneTime / 0.12) * (run.fromX - x) * 0.23);
@@ -159,7 +159,7 @@ export function createWorld(container, renderer) {
       rocks[i].rotation.set(elapsed * 0.13 + i, elapsed * 0.19 + i, i);
     }
 
-    const cycle = distance % 3500;
+    const cycle = run.distance % 3500;
     const index = phaseColors.findIndex(phase => cycle < phase.end);
     const current = phaseColors[index];
     const next = phaseColors[(index + 1) % phaseColors.length];

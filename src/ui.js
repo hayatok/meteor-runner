@@ -19,6 +19,7 @@ function readBest() {
 export function createUI() {
   let best = readBest();
   const flash = get('flash');
+  const crashGlow = get('crash-glow');
   const score = get('score');
   const distance = get('distance');
   const combo = get('combo');
@@ -30,6 +31,7 @@ export function createUI() {
   const missionList = get('missions');
   const chain = get('chain');
   const countdown = get('countdown');
+  const notices = [miss, chain, countdown, get('phase-banner'), get('fever-banner')];
   const resultScore = get('result-score');
   const resultRank = get('result-rank');
   const animations = new Map();
@@ -78,7 +80,20 @@ export function createUI() {
 
   function flashScreen(kind) {
     flash.dataset.effect = kind;
-    animate(flash, [{ opacity: kind === 'crash' ? 0.96 : 0.78 }, { opacity: 0 }], {
+    if (kind === 'crash') {
+      animate(flash, [
+        { opacity: 0.98 },
+        { opacity: 0.98, offset: 150 / 400, easing: 'ease-out' },
+        { opacity: 0 },
+      ], { duration: 400, fill: 'forwards' });
+      animate(crashGlow, [
+        { opacity: 0.85 },
+        { opacity: 0.85, offset: 0.4, easing: 'ease-out' },
+        { opacity: 0 },
+      ], { duration: 500, fill: 'forwards' });
+      return;
+    }
+    animate(flash, [{ opacity: 0.78 }, { opacity: 0 }], {
       duration: kind === 'gate' ? 510 : 310, easing: 'ease-out', fill: 'forwards',
     });
   }
@@ -124,7 +139,9 @@ export function createUI() {
     for (const animation of animations.values()) animation.cancel();
     animations.clear();
     results = null;
-    miss.textContent = '';
+    for (const notice of notices) notice.textContent = '';
+    countdown.hidden = true;
+    delete flash.dataset.effect;
     toasts.replaceChildren();
     missionList.replaceChildren(...run.missions.map(missionItem));
   }

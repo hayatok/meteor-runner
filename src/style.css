@@ -21,13 +21,14 @@ body { margin: 0; overflow: hidden; }
 
 canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-#flash {
+#flash, #crash-glow {
   position: absolute;
   inset: 0;
-  background: #a8fff2;
   opacity: 0;
   pointer-events: none;
 }
+
+#flash { background: #a8fff2; }
 
 #hud {
   position: absolute;
@@ -123,7 +124,11 @@ dd { margin: 0; font-size: 1.25rem; font-weight: 700; }
   box-shadow: inset 0 0 8vmin #2ec4b6;
 }
 #flash[data-effect="go"] { background: radial-gradient(ellipse at 50% 73%, #fff2bc, #2ec4b645 26%, transparent 59%); }
-#flash[data-effect="crash"] { background: white; }
+#crash-glow {
+  z-index: 1;
+  background: radial-gradient(ellipse at 50% 65%, #ffcc8c 0%, #ff8c4280 35%, transparent 75%);
+}
+#flash[data-effect="crash"] { z-index: 2; background: white; }
 
 #countdown {
   position: absolute;
